@@ -1,0 +1,99 @@
+#!/usr/bin/python
+
+import sys 
+import os
+from libxml import BuildXml
+import random
+import minijs
+import time
+
+VERSION = '2.0.3.2'
+def Params( args ) :
+  param = {
+      "nopack" : False ,
+      "all" : False ,
+      "file" : "build.xml" ,
+      "target" : None ,
+      "path" : None ,
+      "yui" : False 
+  }
+  for arg in args :
+    if arg.startswith("--") :
+      arg = arg[2:]
+      if arg in param :
+        param[ arg ] = True
+    elif os.path.isfile( arg ) :
+      urls = arg.split("/")
+      param["file"] = urls.pop()
+      param["path"] = "/".join( urls )
+    else :
+      param["target"] = arg
+  if param["path"] == '.' or param["path"] == "" :
+    param["path"] = None
+  return param
+class PackError(Exception):
+  def __init__(self, value):
+    self.value = "i can not find the file " + value + " please check it and try again "
+  def __str__(self):
+    return repr(self.value)
+def joinfiles( xml , target , param ):
+  dest,urls = xml.getDest( target ) 
+  results = ""
+  st = time.time()
+  print "%s : \n" % target
+  for url in urls :
+    if os.path.isfile( url ):
+      file_obejct = open( url )
+      results += "\n" + file_obejct.read()
+      file_obejct.close()
+    else :
+      raise PackError( url );
+  file_path = dest
+  path = param["path"]
+  if path is not None :
+    file_path = path + "/" + file_path 
+  file_obj = open( file_path , "w" )
+  file_obj.write( results )
+  file_obj.close()
+  if param['nopack'] is False :
+    tmp = "/tmp/packjs_tmp_" + str( random.randint( 10000 , 100000 ) ) + ".js"
+    ags =  [ file_path , tmp ]
+    if param['yui'] is True :
+      ags.append( "--yui" )
+    ret = minijs.Main( ags )
+    if ret > 0 :
+      exit( ret )
+    else :
+       os.system( "mv %s %s" % ( tmp , file_path  ) );      
+  print "BUILD SUCCESSFUL\nTotal time: %s seconds\ndone!" % ( int( time.time() - st ) )
+def Main() :
+  param = Params( sys.argv[1:] )
+  pt = param["path"] 
+  if pt is None :
+    pt = ""
+  else :
+    pt = pt + "/"
+  print "\nBuildfile:%s%s\n" % ( pt , param["file"] )
+  if os.path.isfile( param["file"] ) :
+    xml = BuildXml( param["file"] )
+    xml.getProject(0)
+    #if param["all"] is not False :
+    print param
+    if param["target"] is None and param['all'] is False:
+      xml.getTargetAt( xml.project , 0 )
+      joinfiles( xml , xml.target , param )
+    else:
+      index = 0 
+      while True :
+        xml.getTargetAt( xml.project , index )
+        index = index + 1 
+        if not xml.target :
+           exit(0)
+        else :
+          if param['all'] is False or xml.target == param['target'] :
+             joinfiles( xml , xml.target , param )
+          else :
+            joinfiles( xml , xml.target , param )
+  else :
+    raise PackError( param["file"] )
+Main()
